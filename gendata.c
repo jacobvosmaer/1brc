@@ -90,4 +90,6 @@ int main(int argc, char **argv) {
     float temp = c->mean + randomgaussian(&mp) * 10.0;
     printf("%s;%.1f\n", c->name, temp);
   }
+
+  return 0;
 }
