@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,16 +9,49 @@
   if (!(x))                                                                    \
   __builtin_trap()
 
-char buf[256], *pickcities[10000];
+char buf[256];
+struct city {
+  char *name;
+  double mean;
+} pickcities[10000];
 
 void fail(char *msg) {
   fprintf(stderr, "gendata: %s\n", msg);
   exit(1);
 }
 
+double randomdouble(void) {
+  return (double)random() / ((double)((1L << 31) - 1));
+}
+
+struct marsagliapolar {
+  int hasnext;
+  double next;
+};
+
+/* Based on https://en.wikipedia.org/wiki/Marsaglia_polar_method#C++ */
+double randomgaussian(struct marsagliapolar *mp) {
+  double u, v, s;
+  if (mp->hasnext) {
+    mp->hasnext = 0;
+    return mp->next;
+  }
+
+  do {
+    u = randomdouble() * 2.0 - 1.0;
+    v = randomdouble() * 2.0 - 1.0;
+    s = u * u + v * v;
+  } while (s >= 1.0 || s == 0.0);
+  s = sqrt(-2.0 * log(s) / s);
+  mp->next = v * s;
+  mp->hasnext = 1;
+  return u * s;
+}
+
 int main(int argc, char **argv) {
-  char **cities = 0;
-  int ncities = 0, maxcities = 0, nrows, npicked;
+  struct city *cities = 0;
+  int ncities = 0, maxcities = 0, nrows, i;
+  struct marsagliapolar mp = {0};
 
   if (argc != 2)
     fail("Usage: gendata NUM");
@@ -28,27 +62,32 @@ int main(int argc, char **argv) {
 
   while (fgets(buf, sizeof(buf), stdin)) {
     char *p;
+    struct city *c;
     if (*buf == '#')
       continue;
     if (ncities == maxcities) {
       maxcities = maxcities ? 2 * maxcities : 1;
       assert(cities = realloc(cities, maxcities * sizeof(*cities)));
     }
+    c = cities + ncities;
     assert(p = strchr(buf, ';'));
     *p = 0;
-    assert(cities[ncities++] = strdup(buf));
+    assert(c->name = strdup(buf));
+    assert(sscanf(p + 1, "%lf", &c->mean) == 1);
+    ncities++;
   }
 
-  assert(ncities > nelem(pickcities));
-  for (npicked = 0; npicked < nelem(pickcities); npicked++) {
-    int i = random() % ncities;
-    pickcities[npicked] = cities[i];
-    memmove(cities + i, cities + i + 1, ncities - (i + 1));
+  assert(ncities >= nelem(pickcities));
+  for (i = 0; i < nelem(pickcities); i++) {
+    int j = random() % ncities;
+    pickcities[i] = cities[j];
+    memmove(cities + j, cities + j + 1, ncities - (j + 1));
     ncities--;
   }
 
   while (nrows--) {
-    float temp = (-999 + (random() % 1999)) / 10.0;
-    printf("%s;%.1f\n", pickcities[random() % nelem(pickcities)], temp);
+    struct city *c = pickcities + random() % nelem(pickcities);
+    float temp = c->mean + randomgaussian(&mp) * 10.0;
+    printf("%s;%.1f\n", c->name, temp);
   }
 }
