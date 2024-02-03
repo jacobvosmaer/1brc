@@ -1,2 +1,3 @@
 gendata
 *.pprof
+*.dSYM/
