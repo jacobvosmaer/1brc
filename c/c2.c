@@ -8,7 +8,7 @@
   __builtin_trap()
 #define nelem(x) (sizeof(x) / sizeof(*(x)))
 
-#define EXP 14
+#define EXP 16
 struct city {
   char *name;
   double total, min, max;
@@ -28,37 +28,41 @@ int ht_lookup(uint64_t hash, int exp, int idx) {
   return (idx + step) & mask;
 }
 
+int collissions;
+
 uint64_t hash(char *key) {
   uint64_t h = 0;
   while (*key)
-    h = 23 * h + *key++;
+    h = 111 * h + (uint64_t)*key++;
   return h;
 }
 
 void upsert(char *name, double temp) {
   uint64_t h = hash(name);
-  int i;
+  int i = h;
   struct city *c;
 
-  for (i = h;;) {
+  while (1) {
     i = ht_lookup(h, EXP, i);
-    if (!cities[i].name || !strcmp(name, cities[i].name))
-      break;
-  }
+    c = cities + i;
 
-  c = cities + i;
-  if (c->name && !strcmp(c->name, name)) {
-    if (temp < c->min)
-      c->min = temp;
-    if (temp > c->max)
-      c->max = temp;
-    c->total += temp;
-    c->num++;
-  } else {
-    assert(c->name = strdup(name));
-    c->min = c->max = c->total = temp;
-    c->num = 1;
-    ncities++;
+    if (!c->name) {
+      assert(ncities < nelem(cities));
+      assert(c->name = strdup(name));
+      c->min = c->max = c->total = temp;
+      c->num = 1;
+      ncities++;
+      return;
+    } else if (!strcmp(name, c->name)) {
+      if (temp < c->min)
+        c->min = temp;
+      if (temp > c->max)
+        c->max = temp;
+      c->total += temp;
+      c->num++;
+      return;
+    }
+    collissions++;
   }
 }
 
@@ -116,6 +120,7 @@ int main(void) {
     assert(sscanf(p + 1, "%lf", &temp) == 1);
     upsert(buf, temp);
   }
+  fprintf(stderr, "collissions=%d\n", collissions);
 
   assert(sortcities = malloc(ncities * sizeof(*sortcities)));
   for (c = cities, i = 0; c < cities + nelem(cities); c++)
