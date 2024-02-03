@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
   for (i = 0; i < nelem(pickcities); i++) {
     int j = random() % ncities;
     pickcities[i] = cities[j];
-    memmove(cities + j, cities + j + 1, ncities - (j + 1));
+    memmove(cities + j, cities + j + 1, (ncities - (j + 1)) * sizeof(*cities));
     ncities--;
   }
 
