@@ -182,8 +182,6 @@ int main(void) {
   if (!(in = mmap(0, st.st_size, PROT_READ, MAP_PRIVATE, 0, 0)))
     err(-1, "mmap stdin");
 
-  if (0)
-    printf("%p %p %lld\n", (void *)in, (void *)(in + st.st_size), st.st_size);
   for (i = 0; i < nelem(threaddata); i++) {
     t = threaddata + i;
     if (i == 0) {
@@ -198,9 +196,6 @@ int main(void) {
                              '\n', 256));
       t->end++;
     }
-    if (0)
-      printf("%p %p %ld\n", (void *)t->start, (void *)t->end,
-             t->end - t->start);
     assert(!pthread_create(&t->thread, 0, processinput, t));
   }
 
