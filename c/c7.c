@@ -169,9 +169,6 @@ int main(void) {
   struct threaddata *t, *t0 = threaddata;
   int i;
 
-  if (0)
-    assert(!setvbuf(stdin, stdinbuf, _IOFBF, sizeof(stdinbuf)));
-
   if (0) {
     testupsert();
     return 0;

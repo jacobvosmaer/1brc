@@ -131,9 +131,6 @@ int main(void) {
   struct stat st;
   char *in, *line;
 
-  if (0)
-    assert(!setvbuf(stdin, stdinbuf, _IOFBF, sizeof(stdinbuf)));
-
   if (0) {
     testupsert();
     return 0;
