@@ -73,8 +73,6 @@ struct city *upsert(char *name, int size) {
   }
 }
 
-char buf[256], stdinbuf[1 << 16];
-
 void printcities(void) {
   struct city *c;
   for (c = cities; c < cities + ncities; c++)

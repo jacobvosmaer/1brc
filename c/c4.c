@@ -59,7 +59,7 @@ struct city *upsert(char *name) {
   }
 }
 
-char buf[256], stdinbuf[1 << 16];
+char buf[256];
 
 void printcities(void) {
   struct city *c;

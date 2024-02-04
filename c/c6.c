@@ -73,8 +73,6 @@ struct record *upsert(char *name, int size, uint64_t hash) {
   }
 }
 
-char buf[256], stdinbuf[1 << 16];
-
 void printrecords(void) {
   struct record *r;
   for (r = records; r < records + nrecords; r++)

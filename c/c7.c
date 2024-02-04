@@ -78,8 +78,6 @@ struct record *upsert(struct threaddata *t, char *name, int size,
   }
 }
 
-char buf[256], stdinbuf[1 << 16];
-
 void printrecords(struct threaddata *t) {
   struct record *r;
   for (r = t->records; r < t->records + t->nrecords; r++)
