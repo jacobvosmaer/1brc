@@ -13,7 +13,8 @@ char buf[256];
 struct city {
   char *name;
   double mean;
-} pickcities[10000];
+  int select;
+} selectcities[10000];
 
 void fail(char *msg) {
   fprintf(stderr, "gendata: %s\n", msg);
@@ -77,16 +78,17 @@ int main(int argc, char **argv) {
     ncities++;
   }
 
-  assert(ncities >= nelem(pickcities));
-  for (i = 0; i < nelem(pickcities); i++) {
-    int j = random() % ncities;
-    pickcities[i] = cities[j];
-    memmove(cities + j, cities + j + 1, (ncities - (j + 1)) * sizeof(*cities));
-    ncities--;
+  assert(ncities >= nelem(selectcities));
+  for (i = 0; i < nelem(selectcities);) {
+    struct city *c = cities + random() % ncities;
+    if (!c->select) {
+      c->select = 1;
+      selectcities[i++] = *c;
+    }
   }
 
   while (nrows--) {
-    struct city *c = pickcities + random() % nelem(pickcities);
+    struct city *c = selectcities + random() % nelem(selectcities);
     float temp = c->mean + randomgaussian(&mp) * 10.0;
     printf("%s;%.1f\n", c->name, temp);
   }
