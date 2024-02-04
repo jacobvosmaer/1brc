@@ -109,16 +109,14 @@ int main(void) {
     char *p;
     int64_t temp = 0, sign = 1;
     assert(p = strchr(buf, ';'));
-    *p = 0;
-    if (*++p == '-') {
+    *p++ = 0;
+    if (*p == '-') {
       sign = -1;
       p++;
     }
-    for (; *p && *p != '\n'; p++) {
-      if (*p == '.')
-        continue;
-      temp = 10 * temp + digit(*p);
-    }
+    for (; *p && *p != '\n'; p++)
+      if (*p != '.')
+        temp = 10 * temp + digit(*p);
     temp *= sign;
     c = upsert(buf);
     if (!c->num || temp < c->min)
