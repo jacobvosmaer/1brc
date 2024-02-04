@@ -45,6 +45,7 @@ struct city *upsert(char *name) {
     i = ht_lookup(h, EXP, i);
 
     if (!cityindex[i]) {
+      assert(ncities < nelem(cities));
       cityindex[i] = cities + ncities++;
       assert(cityindex[i]->name = strdup(name));
       return cityindex[i];
@@ -128,6 +129,8 @@ int main(void) {
   }
   fprintf(stderr, "collissions=%d\n", collissions);
 
+  /* This qsort will invalidate cityindex but that is OK because we don't need
+   * cityindex anymore. */
   qsort(cities, ncities, sizeof(*cities), citynameasc);
 
   for (c = cities; c < cities + ncities; c++)
