@@ -24,7 +24,7 @@ struct threaddata {
   int nrecords;
   char *start, *end;
   pthread_t thread;
-} threaddata[1];
+} threaddata[16];
 
 int recordnameasc(const void *a_, const void *b_) {
   const struct record *a = a_, *b = b_;
@@ -182,23 +182,31 @@ int main(void) {
   if (!(in = mmap(0, st.st_size, PROT_READ, MAP_PRIVATE, 0, 0)))
     err(-1, "mmap stdin");
 
+  if (0)
+    printf("%p %p %lld\n", (void *)in, (void *)(in + st.st_size), st.st_size);
   for (i = 0; i < nelem(threaddata); i++) {
     t = threaddata + i;
     if (i == 0) {
       t->start = in;
     } else {
+      t->start = (t - 1)->end;
     }
     if (i == nelem(threaddata) - 1) {
       t->end = in + st.st_size;
     } else {
+      assert(t->end = memchr(in + (i + 1) * (st.st_size / nelem(threaddata)),
+                             '\n', 256));
+      t->end++;
     }
+    if (0)
+      printf("%p %p %ld\n", (void *)t->start, (void *)t->end,
+             t->end - t->start);
     assert(!pthread_create(&t->thread, 0, processinput, t));
   }
 
   for (t = threaddata; t < threaddata + nelem(threaddata); t++) {
-    pthread_join(t->thread, 0);
-    if (t > threaddata) {
-      struct threaddata *t0 = threaddata;
+    assert(!pthread_join(t->thread, 0));
+    if (t > t0) {
       for (r = t->records; r < t->records + t->nrecords; r++)
         updaterecord(upsertstr(t0, r->name), r->total, r->num, r->min, r->max);
     }
