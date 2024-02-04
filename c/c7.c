@@ -184,11 +184,7 @@ int main(void) {
 
   for (i = 0; i < nelem(threaddata); i++) {
     t = threaddata + i;
-    if (i == 0) {
-      t->start = in;
-    } else {
-      t->start = (t - 1)->end;
-    }
+    t->start = i == 0 ? in : (t - 1)->end;
     if (i == nelem(threaddata) - 1) {
       t->end = in + st.st_size;
     } else {
