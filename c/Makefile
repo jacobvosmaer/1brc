@@ -1,2 +1,2 @@
-CFLAGS+=-Wall -Werror -pedantic -std=gnu89 -flto -g -fsanitize=address -fno-omit-frame-pointer
+CFLAGS+=-Wall -Werror -pedantic -std=gnu89 -fno-omit-frame-pointer -flto -g -fsanitize=address
 
