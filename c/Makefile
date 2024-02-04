@@ -1,5 +1,5 @@
 CFLAGS+=-Wall -Werror -pedantic -std=gnu89 -fno-omit-frame-pointer -flto -O2
-LDLIBS += -lm
+LDLIBS += -lm -lpthread
 OBJS = c1 c2 c3 c4 c5 c6 c7
 all: $(OBJS)
 
