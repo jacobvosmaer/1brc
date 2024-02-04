@@ -65,18 +65,18 @@ void printcities(void) {
 }
 
 void testupsert(void) {
-  struct city *c;
+  struct city *c, *abc, *def;
 
-  upsert("abc");
+  abc = upsert("abc");
   assert(ncities == 1);
   printcities();
-  upsert("def");
+  def = upsert("def");
   assert(ncities == 2);
   printcities();
-  upsert("abc");
+  assert(upsert("abc") == abc);
   assert(ncities == 2);
   printcities();
-  upsert("def");
+  assert(upsert("def") == def);
   assert(ncities == 2);
   printcities();
   upsert("012");
@@ -86,6 +86,7 @@ void testupsert(void) {
   for (c = cities; c < cities + nelem(cities); c++)
     free(c->name);
   ncities = 0;
+  memset(cityindex, 0, sizeof(cityindex));
 }
 
 int main(void) {
