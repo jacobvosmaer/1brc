@@ -54,21 +54,20 @@ int equalmemstr(char *mem, int size, char *str) {
 
 struct city *upsert(char *name, int size, uint64_t hash) {
   int i = hash;
-  struct city *c;
+  struct city **c;
 
   while (1) {
     i = ht_lookup(hash, EXP, i);
-    c = cityindex[i];
-
-    if (!c) {
+    c = cityindex + i;
+    if (!*c) {
       assert(ncities < nelem(cities));
-      c = cityindex[i] = cities + ncities++;
-      assert(c->name = malloc(size + 1));
-      memmove(c->name, name, size);
-      c->name[size] = 0;
-      return c;
-    } else if (equalmemstr(name, size, c->name)) {
-      return c;
+      *c = cities + ncities++;
+      assert((*c)->name = malloc(size + 1));
+      memmove((*c)->name, name, size);
+      (*c)->name[size] = 0;
+      return *c;
+    } else if (equalmemstr(name, size, (*c)->name)) {
+      return *c;
     }
     collissions++;
   }
