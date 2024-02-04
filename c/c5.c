@@ -150,9 +150,9 @@ int main(void) {
       c->max = temp;
     c->total += temp;
     c->num++;
-    if (!(line = memchr(line, '\n', st.st_size - (line - in))))
+    if (*p != '\n')
       errx(-1, "missing newline");
-    line++; /* consume newline */
+    line = p + 1; /* consume newline */
   }
   fprintf(stderr, "collissions=%d\n", collissions);
 
