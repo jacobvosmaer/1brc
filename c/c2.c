@@ -37,7 +37,7 @@ uint64_t hash(char *key) {
   return h;
 }
 
-void upsert(char *name, double temp) {
+struct city *upsert(char *name) {
   uint64_t h = hash(name);
   int i = h;
   struct city *c;
@@ -47,20 +47,11 @@ void upsert(char *name, double temp) {
     c = cities + i;
 
     if (!c->name) {
-      assert(ncities < nelem(cities));
       assert(c->name = strdup(name));
-      c->min = c->max = c->total = temp;
-      c->num = 1;
       ncities++;
-      return;
+      return c;
     } else if (!strcmp(name, c->name)) {
-      if (temp < c->min)
-        c->min = temp;
-      if (temp > c->max)
-        c->max = temp;
-      c->total += temp;
-      c->num++;
-      return;
+      return c;
     }
     collissions++;
   }
@@ -79,19 +70,19 @@ void printcities(void) {
 void testupsert(void) {
   struct city *c;
 
-  upsert("abc", 1);
+  upsert("abc");
   assert(ncities == 1);
   printcities();
-  upsert("def", 2);
+  upsert("def");
   assert(ncities == 2);
   printcities();
-  upsert("abc", 3);
+  upsert("abc");
   assert(ncities == 2);
   printcities();
-  upsert("def", 4);
+  upsert("def");
   assert(ncities == 2);
   printcities();
-  upsert("012", 5);
+  upsert("012");
   assert(ncities == 3);
   printcities();
 
@@ -118,7 +109,13 @@ int main(void) {
     assert(p = strchr(buf, ';'));
     *p = 0;
     assert(sscanf(p + 1, "%lf", &temp) == 1);
-    upsert(buf, temp);
+    c = upsert(buf);
+    if (!c->num || temp < c->min)
+      c->min = temp;
+    if (!c->num || temp > c->max)
+      c->max = temp;
+    c->total += temp;
+    c->num++;
   }
   fprintf(stderr, "collissions=%d\n", collissions);
 
