@@ -13,7 +13,7 @@ struct city {
   char *name;
   double total, min, max;
   int num;
-} cities[1 << EXP];
+} cities[1 << 14], *cityindex[1 << EXP];
 int ncities;
 
 int citynameasc(const void *a_, const void *b_) {
@@ -40,18 +40,16 @@ uint64_t hash(char *key) {
 struct city *upsert(char *name) {
   uint64_t h = hash(name);
   int i = h;
-  struct city *c;
 
   while (1) {
     i = ht_lookup(h, EXP, i);
-    c = cities + i;
 
-    if (!c->name) {
-      assert(c->name = strdup(name));
-      ncities++;
-      return c;
-    } else if (!strcmp(name, c->name)) {
-      return c;
+    if (!cityindex[i]) {
+      cityindex[i] = cities + ncities++;
+      assert(cityindex[i]->name = strdup(name));
+      return cityindex[i];
+    } else if (!strcmp(name, cityindex[i]->name)) {
+      return cityindex[i];
     }
     collissions++;
   }
@@ -61,9 +59,8 @@ char buf[256], stdinbuf[1 << 16];
 
 void printcities(void) {
   struct city *c;
-  for (c = cities; c < cities + nelem(cities); c++)
-    if (c->name)
-      printf("%s %.1f\n", c->name, c->max);
+  for (c = cities; c < cities + ncities; c++)
+    printf("%s %.1f\n", c->name, c->max);
   putchar('\n');
 }
 
@@ -92,8 +89,7 @@ void testupsert(void) {
 }
 
 int main(void) {
-  struct city *c, *sortcities;
-  int i;
+  struct city *c;
 
   if (0)
     assert(!setvbuf(stdin, stdinbuf, _IOFBF, sizeof(stdinbuf)));
@@ -119,16 +115,10 @@ int main(void) {
   }
   fprintf(stderr, "collissions=%d\n", collissions);
 
-  assert(sortcities = malloc(ncities * sizeof(*sortcities)));
-  for (c = cities, i = 0; c < cities + nelem(cities); c++)
-    if (c->name)
-      sortcities[i++] = *c;
-  assert(i == ncities);
+  qsort(cities, ncities, sizeof(*cities), citynameasc);
 
-  qsort(sortcities, ncities, sizeof(*sortcities), citynameasc);
-
-  for (c = sortcities; c < sortcities + ncities; c++)
-    printf("%s%s=%.1f/%.1f/%.1f", c == sortcities ? "{" : ", ", c->name, c->min,
+  for (c = cities; c < cities + ncities; c++)
+    printf("%s%s=%.1f/%.1f/%.1f", c == cities ? "{" : ", ", c->name, c->min,
            c->total / (double)c->num, c->max);
   puts("}");
 
