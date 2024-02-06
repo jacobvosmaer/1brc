@@ -89,8 +89,17 @@ int main(int argc, char **argv) {
 
   while (nrows--) {
     struct city *c = selectcities + random() % nelem(selectcities);
-    float temp = c->mean + randomgaussian(&mp) * 10.0;
-    printf("%s;%.1f\n", c->name, temp);
+    char buf[6];
+    /* We can get outliers above 99.9 or below -99.9. This would break the
+     * assumptions of the challenge, so we filter out strings that are too long.
+     */
+    while (1) {
+      float temp = c->mean + randomgaussian(&mp) * 10.0;
+      int n = snprintf(buf, sizeof(buf), "%.1f", temp);
+      if ((n == 5 && buf[0] == '-' && buf[3] == '.') || (n == 4))
+        break;
+    }
+    printf("%s;%s\n", c->name, buf);
   }
 
   return 0;
