@@ -43,10 +43,9 @@ int ht_lookup(uint64_t hash, int exp, int idx) {
   return (idx + step) & mask;
 }
 
-uint64_t hashinit(void) { return 3141592653; }
 void hashupdate(uint64_t *h, char c) { *h = 111 * *h + (uint64_t)c; }
 uint64_t hashstr(char *s) {
-  uint64_t h = hashinit();
+  uint64_t h = 0;
   while (*s)
     hashupdate(&h, *s++);
   return h;
@@ -238,7 +237,7 @@ void *processinput(void *data) {
   for (line = t->start; line < t->end;) {
     char *p = line;
     int64_t val;
-    uint64_t hash = hashinit();
+    uint64_t hash = 0;
     while (*p != ';')
       hashupdate(&hash, *p++);
     r = upsert(t, line, p - line, hash);
