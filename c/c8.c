@@ -137,11 +137,11 @@ void updaterecord(struct record *r, int64_t total, int num, int64_t min,
 
 #if defined(__ARM_NEON)
 int64_t parsenumneon(char **pp) {
-  uint16_t input[4], ddpd[] = {'0', '0', '.', '0'}, ddpdmax[] = {9, 9, 0, 9},
-                     ddpdscale[] = {100, 10, 0, 1},
-                     dpdn[] = {'0', '.', '0', '\n'}, dpdnmax[] = {9, 0, 9, 0},
-                     dpdnscale[] = {10, 0, 1, 0};
-  uint16x4_t normalized, scaled;
+  uint16_t input[4];
+  uint16x4_t normalized, scaled,
+      ddpd = {'0', '0', '.', '0'}, ddpdmax = {9, 9, 0, 9},
+      ddpdscale = {100, 10, 0, 1}, dpdn = {'0', '.', '0', '\n'},
+      dpdnmax = {9, 0, 9, 0}, dpdnscale = {10, 0, 1, 0};
   int16_t sign;
   uint16_t isddpd, isdpdn;
   uint8_t *p = (uint8_t *)*pp;
@@ -155,15 +155,15 @@ int64_t parsenumneon(char **pp) {
   input[2] = p[2];
   input[3] = p[3];
 
-  normalized = vsub_u16(vld1_u16(input), vld1_u16(ddpd));
-  isddpd = !!vminv_u16(vcle_u16(normalized, vld1_u16(ddpdmax)));
-  scaled = vmul_u16(normalized, vld1_u16(ddpdscale));
+  normalized = vsub_u16(vld1_u16(input), ddpd);
+  isddpd = !!vminv_u16(vcle_u16(normalized, ddpdmax));
+  scaled = vmul_u16(normalized, ddpdscale);
   out += isddpd * sign * vaddv_u16(scaled);
   p += isddpd * 4;
 
-  normalized = vsub_u16(vld1_u16(input), vld1_u16(dpdn));
-  isdpdn = !!vminv_u16(vcle_u16(normalized, vld1_u16(dpdnmax)));
-  scaled = vmul_u16(normalized, vld1_u16(dpdnscale));
+  normalized = vsub_u16(vld1_u16(input), dpdn);
+  isdpdn = !!vminv_u16(vcle_u16(normalized, dpdnmax));
+  scaled = vmul_u16(normalized, dpdnscale);
   out += isdpdn * sign * vaddv_u16(scaled);
   p += isdpdn * 3;
 
