@@ -136,38 +136,38 @@ void updaterecord(struct record *r, int64_t total, int num, int64_t min,
 }
 
 #if defined(__ARM_NEON)
-int64_t parsenumneon(uint8_t **p) {
-  int16_t input[4], ddpd[] = {'0', '0', '.', '0'}, ddpdmax[] = {9, 9, 0, 9},
-                    ddpdscale[] = {100, 10, 0, 1},
-                    dpdn[] = {'0', '.', '0', '\n'}, dpdnmax[] = {9, 0, 9, 0},
-                    dpdnscale[] = {10, 0, 1, 0};
-  int16x4_t normalized, scaled, zero = {0};
+int64_t parsenumneon(char **pp) {
+  uint16_t input[4], ddpd[] = {'0', '0', '.', '0'}, ddpdmax[] = {9, 9, 0, 9},
+                     ddpdscale[] = {100, 10, 0, 1},
+                     dpdn[] = {'0', '.', '0', '\n'}, dpdnmax[] = {9, 0, 9, 0},
+                     dpdnscale[] = {10, 0, 1, 0};
+  uint16x4_t normalized, scaled;
   int16_t sign;
   uint16_t isddpd, isdpdn;
+  uint8_t *p = (uint8_t *)*pp;
   int64_t out = 0;
 
-  sign = 1 - 2 * (**p == '-');
-  *p += (**p == '-');
+  sign = 1 - 2 * (*p == '-');
+  p += (*p == '-');
 
-  input[0] = (*p)[0];
-  input[1] = (*p)[1];
-  input[2] = (*p)[2];
-  input[3] = (*p)[3];
+  input[0] = p[0];
+  input[1] = p[1];
+  input[2] = p[2];
+  input[3] = p[3];
 
-  normalized = vsub_s16(vld1_s16(input), vld1_s16(ddpd));
-  isddpd = !!vminv_u16(vand_u16(vcle_s16(normalized, vld1_s16(ddpdmax)),
-                                vcge_s16(normalized, zero)));
-  scaled = vmul_s16(normalized, vld1_s16(ddpdscale));
-  out += isddpd * sign * vaddv_s16(scaled);
-  *p += isddpd * 4;
+  normalized = vsub_u16(vld1_u16(input), vld1_u16(ddpd));
+  isddpd = !!vminv_u16(vcle_u16(normalized, vld1_u16(ddpdmax)));
+  scaled = vmul_u16(normalized, vld1_u16(ddpdscale));
+  out += isddpd * sign * vaddv_u16(scaled);
+  p += isddpd * 4;
 
-  normalized = vsub_s16(vld1_s16(input), vld1_s16(dpdn));
-  isdpdn = !!vminv_u16(vand_u16(vcle_s16(normalized, vld1_s16(dpdnmax)),
-                                vcge_s16(normalized, zero)));
-  scaled = vmul_s16(normalized, vld1_s16(dpdnscale));
-  out += isdpdn * sign * vaddv_s16(scaled);
-  *p += isdpdn * 3;
+  normalized = vsub_u16(vld1_u16(input), vld1_u16(dpdn));
+  isdpdn = !!vminv_u16(vcle_u16(normalized, vld1_u16(dpdnmax)));
+  scaled = vmul_u16(normalized, vld1_u16(dpdnscale));
+  out += isdpdn * sign * vaddv_u16(scaled);
+  p += isdpdn * 3;
 
+  *pp = (char *)p;
   return out;
 }
 #endif
@@ -177,7 +177,7 @@ int64_t parsenum(char **pp) {
   char *p = *pp;
 
 #if 10 && defined(__ARM_NEON)
-  return parsenumneon((uint8_t **)pp);
+  return parsenumneon(pp);
 #endif
 
   sign = 1 - 2 * (*p == '-');
