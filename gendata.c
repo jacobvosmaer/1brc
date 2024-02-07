@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
     while (1) {
       float temp = c->mean + randomgaussian(&mp) * 10.0;
       int n = snprintf(buf, sizeof(buf), "%.1f", temp);
-      if ((n == 5 && buf[0] == '-' && buf[3] == '.') || (n == 4))
+      if ((n == 5 && buf[0] == '-' && buf[3] == '.') || (n == 4) || (n == 3))
         break;
     }
     printf("%s;%s\n", c->name, buf);
