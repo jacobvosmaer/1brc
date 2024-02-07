@@ -1,6 +1,6 @@
 CFLAGS+=-Wall -Werror -pedantic -std=gnu89 -fno-omit-frame-pointer -flto -O2
 LDLIBS += -lm -lpthread
-OBJS = c1 c2 c3 c4 c5 c6 c7
+OBJS = c1 c2 c3 c4 c5 c6 c7 c8
 all: $(OBJS)
 
 debug: CFLAGS += -O0 -g -fsanitize=address
