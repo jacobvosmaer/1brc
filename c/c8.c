@@ -100,7 +100,7 @@ struct record *upsertstr(struct threaddata *t, char *s) {
 void testupsert(void) {
   struct record *abc, *def;
   struct threaddata *t;
-  assert(t = malloc(sizeof(*t)));
+  assert(t = calloc(sizeof(*t), 1));
 
   abc = upsertstr(t, "abc");
   assert(t->nrecords == 1);
