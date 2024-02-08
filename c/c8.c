@@ -156,12 +156,22 @@ int64_t parsenumneon(char **pp) {
   input[2] = p[2];
   input[3] = p[3];
 
+  /* Note that x >= '0' && x <= '9' is equivalent to x - '0' >= 0 && x - '0'
+   * <= 9. With unsigned integers, y >= 0 is always true so we can simplify this
+   * to x - '0' <= 9. Similarly, x == '.' is equivalent to x - '.' <= 0. So we
+   * can simultaneously do the range checks for the digits and look for the '.'
+   * by doing vector subtraction followed by less-than-or-equal. */
+
+  /* First case: digit digit period digit (ddpd) */
   normalized = vsub_u16(vld1_u16(input), ddpd);
+  /* If the input was "12.3", normalized now contains {1, 2, 0, 3} */
   isddpd = !!vminv_u16(vcle_u16(normalized, ddpdmax));
   scaled = vmul_u16(normalized, ddpdscale);
+  /* With input "12.3", scaled is now {100, 20, 0 ,3} */
   out += isddpd * sign * vaddv_u16(scaled);
   p += isddpd * 4;
 
+  /* Second case: digit period digit newline (dpdn) */
   normalized = vsub_u16(vld1_u16(input), dpdn);
   isdpdn = !!vminv_u16(vcle_u16(normalized, dpdnmax));
   scaled = vmul_u16(normalized, dpdnscale);
