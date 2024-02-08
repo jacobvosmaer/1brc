@@ -138,11 +138,11 @@ void updaterecord(struct record *r, int64_t total, int num, int64_t min,
 
 #if defined(__ARM_NEON)
 int64_t parsenumneon(char **pp) {
+  uint16x8_t normalized, scaled,
+      minimums = {'0', '0', '.', '0', '0', '.', '0', '\n'},
+      scaletens = {100, 10, 0, 1, 10, 0, 1, 0},
+      maximums = {9, 9, 0, 9, 9, 0, 9, 0}, invec, rangecheck;
   uint16_t input[4];
-  uint16x4_t normalized, scaled,
-      ddpd = {'0', '0', '.', '0'}, ddpdmax = {9, 9, 0, 9},
-      ddpdscale = {100, 10, 0, 1}, dpdn = {'0', '.', '0', '\n'},
-      dpdnmax = {9, 0, 9, 0}, dpdnscale = {10, 0, 1, 0};
   int16_t sign;
   uint16_t isddpd, isdpdn;
   uint8_t *p = (uint8_t *)*pp;
@@ -155,6 +155,7 @@ int64_t parsenumneon(char **pp) {
   input[1] = p[1];
   input[2] = p[2];
   input[3] = p[3];
+  invec = vcombine_u16(vld1_u16(input), vld1_u16(input));
 
   /* Note that x >= '0' && x <= '9' is equivalent to x - '0' >= 0 && x - '0'
    * <= 9. With unsigned integers, y >= 0 is always true so we can simplify this
@@ -162,22 +163,18 @@ int64_t parsenumneon(char **pp) {
    * can simultaneously do the range checks for the digits and look for the '.'
    * by doing vector subtraction followed by less-than-or-equal. */
 
-  /* First case: digit digit period digit (ddpd) */
-  normalized = vsub_u16(vld1_u16(input), ddpd);
-  /* If the input was "12.3", normalized now contains {1, 2, 0, 3} */
-  isddpd = !!vminv_u16(vcle_u16(normalized, ddpdmax));
-  scaled = vmul_u16(normalized, ddpdscale);
-  /* With input "12.3", scaled is now {100, 20, 0 ,3} */
-  out += isddpd * sign * vaddv_u16(scaled);
-  p += isddpd * 4;
+  normalized = vsubq_u16(invec, minimums);
+  rangecheck = vcleq_u16(normalized, maximums);
 
-  /* Second case: digit period digit newline (dpdn) */
-  normalized = vsub_u16(vld1_u16(input), dpdn);
-  isdpdn = !!vminv_u16(vcle_u16(normalized, dpdnmax));
-  scaled = vmul_u16(normalized, dpdnscale);
-  out += isdpdn * sign * vaddv_u16(scaled);
-  p += isdpdn * 3;
+  /* ddpd is the "digit digit period digit" pattern; dpdn is "digit period digit
+   * newline" */
+  isddpd = !!vminv_u16(vget_low_u16(rangecheck));
+  isdpdn = !!vminv_u16(vget_high_u16(rangecheck));
 
+  scaled = vmulq_u16(normalized, scaletens);
+  out = isddpd * sign * vaddv_u16(vget_low_u16(scaled)) +
+        isdpdn * sign * vaddv_u16(vget_high_u16(scaled));
+  p += isddpd * 4 + isdpdn * 3;
   *pp = (char *)p;
   return out;
 }
