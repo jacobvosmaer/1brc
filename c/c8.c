@@ -19,10 +19,13 @@
 
 #define EXP 16
 struct record {
-  char *name;
+  char name[128];
+  int namesize, num;
   int64_t total, min, max;
-  int num;
 };
+
+int namelen(const struct record *r) { return r->namesize; }
+const char *nameof(const struct record *r) { return r->name; }
 
 struct threaddata {
   struct record records[1 << 14], *recordindex[1 << EXP];
@@ -33,7 +36,9 @@ struct threaddata {
 
 int recordnameasc(const void *a_, const void *b_) {
   const struct record *a = a_, *b = b_;
-  return strcmp(a->name, b->name);
+  int alen = namelen(a), blen = namelen(b);
+  int cmp = memcmp(nameof(a), nameof(b), alen < blen ? alen : blen);
+  return cmp + !cmp * (alen < blen ? -1 : 1);
 }
 
 /* From https://nullprogram.com/blog/2022/08/08/ */
@@ -51,17 +56,7 @@ uint64_t hashstr(char *s) {
   return h;
 }
 
-int equalmemstr(char *mem, int size, char *str) {
-  assert(size >= 0);
-  while (size && *str && *mem == *str) {
-    mem++;
-    str++;
-    size--;
-  }
-  return !size && !*str;
-}
-
-struct record *upsert(struct threaddata *t, char *name, int size,
+struct record *upsert(struct threaddata *t, const char *name, int size,
                       uint64_t hash) {
   int i = hash;
   struct record **rp;
@@ -72,11 +67,12 @@ struct record *upsert(struct threaddata *t, char *name, int size,
     if (!*rp) {
       assert(t->nrecords < nelem(t->records));
       *rp = t->records + t->nrecords++;
-      assert((*rp)->name = malloc(size + 1));
+      assert(size + 1 <= nelem((*rp)->name));
+      (*rp)->namesize = size;
       memmove((*rp)->name, name, size);
       (*rp)->name[size] = 0;
       return *rp;
-    } else if (equalmemstr(name, size, (*rp)->name)) {
+    } else if (size == namelen(*rp) && !memcmp(name, nameof(*rp), size)) {
       return *rp;
     }
   }
@@ -89,13 +85,22 @@ void printrecords(struct threaddata *t) {
   putchar('\n');
 }
 
+struct record *upsertsz(struct threaddata *t, const char *s, int size) {
+  uint64_t h = 0;
+  int i;
+  for (i = 0; i < size; i++)
+    hashupdate(&h, s[i]);
+  return upsert(t, s, size, h);
+}
+
 struct record *upsertstr(struct threaddata *t, char *s) {
-  return upsert(t, s, strlen(s), hashstr(s));
+  return upsertsz(t, s, strlen(s));
 }
 
 void testupsert(void) {
-  struct record *r, *abc, *def;
-  struct threaddata *t = threaddata;
+  struct record *abc, *def;
+  struct threaddata *t;
+  assert(t = malloc(sizeof(*t)));
 
   abc = upsertstr(t, "abc");
   assert(t->nrecords == 1);
@@ -113,10 +118,7 @@ void testupsert(void) {
   assert(t->nrecords == 3);
   printrecords(t);
 
-  for (r = t->records; r < t->records + nelem(t->records); r++)
-    free(r->name);
-  t->nrecords = 0;
-  memset(t->recordindex, 0, sizeof(t->recordindex));
+  free(t);
 }
 
 int digit(char c) {
@@ -289,7 +291,8 @@ int main(int argc, char **argv) {
     assert(!pthread_join(t->thread, 0));
     if (t > t0) {
       for (r = t->records; r < t->records + t->nrecords; r++)
-        updaterecord(upsertstr(t0, r->name), r->total, r->num, r->min, r->max);
+        updaterecord(upsertsz(t0, nameof(r), namelen(r)), r->total, r->num,
+                     r->min, r->max);
     }
   }
 
@@ -298,7 +301,7 @@ int main(int argc, char **argv) {
   qsort(t0->records, t0->nrecords, sizeof(*t0->records), recordnameasc);
 
   for (r = t0->records; r < t0->records + t0->nrecords; r++)
-    printf("%s%s=%.1f/%.1f/%.1f", r == t0->records ? "{" : ", ", r->name,
+    printf("%s%s=%.1f/%.1f/%.1f", r == t0->records ? "{" : ", ", nameof(r),
            (double)r->min / 10.0, (double)r->total / (10.0 * (double)r->num),
            (double)r->max / 10.0);
   puts("}");
