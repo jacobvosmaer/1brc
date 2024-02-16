@@ -309,9 +309,9 @@ int main(int argc, char **argv) {
    * recordindex anymore. */
   qsort(t0->records, t0->nrecords, sizeof(*t0->records), recordnameasc);
 
-  for (r = t0->records; r < t0->records + t0->nrecords; r++)
+  for (r = t0->records, i = 0; r < t0->records + t0->nrecords; r++)
     if (r->namesize)
-      printf("%s%s=%.1f/%.1f/%.1f", r == t0->records ? "{" : ", ", nameof(r),
+      printf("%s%s=%.1f/%.1f/%.1f", !i++ ? "{" : ", ", nameof(r),
              (double)r->min / 10.0, (double)r->total / (10.0 * (double)r->num),
              (double)r->max / 10.0);
   puts("}");
