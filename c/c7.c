@@ -21,8 +21,9 @@
 
 struct record {
   char *name;
-  int64_t total, min, max;
-  int num;
+  int64_t total;
+  int16_t min, max;
+  int32_t num;
 };
 
 struct threaddata {
@@ -166,14 +167,15 @@ void *processinput(void *data) {
   return 0;
 }
 
-int main(void) {
+int main(int argc, char **argv) {
   struct record *r;
   struct stat st;
   char *in;
   struct threaddata *t, *t0 = threaddata;
   int i;
 
-  if (0) {
+  if (argc == 2 && !strcmp("-test", argv[1])) {
+    printf("sizeof(struct record)=%ld\n", sizeof(struct record));
     testupsert();
     return 0;
   }
