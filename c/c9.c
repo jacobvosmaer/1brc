@@ -137,7 +137,7 @@ void updaterecord(struct record *r, int64_t total, int num, int64_t min,
   r->num += num;
 }
 
-#if 0 && defined(__ARM_NEON)
+#if defined(__ARM_NEON)
 int64_t parsenumneon(char **pp) {
   uint16x8_t normalized, scaled,
       minimums = {'0', '0', '.', '0', '0', '.', '0', '\n'},
