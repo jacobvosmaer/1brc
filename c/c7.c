@@ -13,6 +13,10 @@
 #define nelem(x) (sizeof(x) / sizeof(*(x)))
 
 #define EXP 16
+#ifndef NTHREAD
+#define NTHREAD 16
+#endif
+
 struct record {
   char *name;
   int64_t total, min, max;
@@ -24,7 +28,7 @@ struct threaddata {
   int nrecords;
   char *start, *end;
   pthread_t thread;
-} threaddata[16];
+} threaddata[NTHREAD];
 
 int recordnameasc(const void *a_, const void *b_) {
   const struct record *a = a_, *b = b_;

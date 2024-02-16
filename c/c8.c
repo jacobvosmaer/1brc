@@ -18,6 +18,10 @@
 #define endof(x) ((x) + nelem(x))
 
 #define EXP 16
+#ifndef NTHREAD
+#define NTHREAD 16
+#endif
+
 struct record {
   char name[128];
   int namesize, num;
@@ -32,7 +36,7 @@ struct threaddata {
   int nrecords;
   char *start, *end;
   pthread_t thread;
-} threaddata[16];
+} threaddata[NTHREAD];
 
 int recordnameasc(const void *a_, const void *b_) {
   const struct record *a = a_, *b = b_;
@@ -213,12 +217,12 @@ void testparsenum(void) {
   struct {
     char *in;
     int out, off;
-  } * t, tests[] = {
-             {"12.3\n", 123, 4},
-             {"-12.3\n", -123, 5},
-             {"1.2\n", 12, 3},
-             {"-1.2\n", -12, 4},
-         };
+  } *t, tests[] = {
+            {"12.3\n", 123, 4},
+            {"-12.3\n", -123, 5},
+            {"1.2\n", 12, 3},
+            {"-1.2\n", -12, 4},
+        };
   for (t = tests; t < endof(tests); t++) {
     char *p = t->in;
     int f = 0;
