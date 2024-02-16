@@ -12,7 +12,9 @@
   __builtin_trap()
 #define nelem(x) (sizeof(x) / sizeof(*(x)))
 
+#ifndef EXP
 #define EXP 16
+#endif
 #ifndef NTHREAD
 #define NTHREAD 16
 #endif

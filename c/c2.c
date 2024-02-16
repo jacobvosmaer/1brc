@@ -8,7 +8,10 @@
   __builtin_trap()
 #define nelem(x) (sizeof(x) / sizeof(*(x)))
 
+#ifndef EXP
 #define EXP 16
+#endif
+
 struct city {
   char *name;
   double total, min, max;
