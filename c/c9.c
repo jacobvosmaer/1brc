@@ -23,6 +23,9 @@
 #ifndef NTHREAD
 #define NTHREAD 16
 #endif
+#ifndef USENEON
+#define USENEON 0
+#endif
 
 struct record {
   char name[128];
@@ -143,8 +146,9 @@ void updaterecord(struct record *r, int64_t total, int num, int64_t min,
   r->num += num;
 }
 
-#if defined(__ARM_NEON)
-int64_t parsenumneon(char **pp) {
+#if USENEON
+
+int64_t parsenum(char **pp) {
   uint16x8_t normalized, scaled,
       minimums = {'0', '0', '.', '0', '0', '.', '0', '\n'},
       scaletens = {100, 10, 0, 1, 10, 0, 1, 0},
@@ -185,15 +189,12 @@ int64_t parsenumneon(char **pp) {
   *pp = (char *)p;
   return out;
 }
-#endif
+
+#else
 
 int64_t parsenum(char **pp) {
   int64_t val, sign;
   char *p = *pp;
-
-#if 10 && defined(__ARM_NEON)
-  return parsenumneon(pp);
-#endif
 
   sign = 1 - 2 * (*p == '-');
   p += (*p == '-');
@@ -204,6 +205,8 @@ int64_t parsenum(char **pp) {
   *pp = p;
   return val;
 }
+
+#endif
 
 void failf(int *failcount, char *fmt, ...) {
   va_list ap;
