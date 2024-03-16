@@ -7,9 +7,6 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#if defined(__ARM_NEON)
-#include <arm_neon.h>
-#endif
 
 #define assert(x)                                                              \
   if (!(x))                                                                    \
@@ -22,9 +19,6 @@
 #endif
 #ifndef NTHREAD
 #define NTHREAD 16
-#endif
-#ifndef USENEON
-#define USENEON 0
 #endif
 
 struct record {
@@ -146,10 +140,21 @@ void updaterecord(struct record *r, int64_t total, int num, int64_t min,
   r->num += num;
 }
 
-int64_t parsenum(char **pp) {
+int64_t parsenum(char **pp, char *end) {
   int64_t val, sign, x, x10, x100;
   int period;
   char *p = *pp;
+
+  if (end - p < 8) {
+    sign = 1 - 2 * (*p == '-');
+    p += (*p == '-');
+    for (val = 0; *p && *p != '\n'; p++)
+      if (*p != '.')
+        val = 10 * val + digit(*p);
+    val *= sign;
+    *pp = p;
+    return val;
+  }
 
   x = *(int64_t *)p;
   /* Test if first character has bit 4 set to 0 */
@@ -170,16 +175,6 @@ int64_t parsenum(char **pp) {
   val += (x100 >> 24) & 0xff;
   val *= -1 - 2 * sign;
   *pp += (period + 12) / 8;
-
-  if (0) {
-    p += (*p == '-');
-    for (val = 0; *p && *p != '\n'; p++)
-      if (*p != '.')
-        val = 10 * val + digit(*p);
-    val *= (-1 - 2 * sign);
-    *pp = p;
-  }
-
   return val;
 }
 
@@ -199,15 +194,15 @@ void testparsenum(void) {
     char *in;
     int out, off;
   } * t, tests[] = {
-             {"12.3\n", 123, 4},
-             {"-12.3\n", -123, 5},
-             {"1.2\n", 12, 3},
-             {"-1.2\n", -12, 4},
+             {"12.3\n", 123, 4},         {"-12.3\n", -123, 5},
+             {"1.2\n", 12, 3},           {"-1.2\n", -12, 4},
+             {"12.3\naaaaaaaa", 123, 4}, {"-12.3\naaaaaaaa", -123, 5},
+             {"1.2\naaaaaaaa", 12, 3},   {"-1.2\naaaaaaaa", -12, 4},
          };
   for (t = tests; t < endof(tests); t++) {
     char *p = t->in;
     int f = 0;
-    int actual = parsenum(&p), off = p - t->in;
+    int actual = parsenum(&p, p + strlen(p)), off = p - t->in;
     warnx("t->in=%s", t->in);
     if (t->out != actual)
       failf(&f, "expected %d, got %d", t->out, actual);
@@ -237,7 +232,7 @@ void *processinput(void *data) {
     r = upsert(t, line, p - line, hash);
     p++;
 
-    val = parsenum(&p);
+    val = parsenum(&p, t->end);
     updaterecord(r, val, 1, val, val);
     if (*p != '\n')
       errx(-1, "missing newline");
@@ -253,7 +248,7 @@ int main(int argc, char **argv) {
   struct threaddata *t, *t0 = threaddata;
   int i;
 
-  if (1 || (argc == 2 && !strcmp("-test", argv[1]))) {
+  if (argc == 2 && !strcmp("-test", argv[1])) {
     testparsenum();
     testupsert();
     return 0;
