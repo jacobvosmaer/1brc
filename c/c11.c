@@ -21,6 +21,8 @@
 #define NTHREAD 16
 #endif
 
+#define CHUNKSIZE (2 << 20)
+
 struct record {
   char name[128];
   int namesize, num;
@@ -31,9 +33,9 @@ int namelen(const struct record *r) { return r->namesize; }
 const char *nameof(const struct record *r) { return r->name; }
 
 struct threaddata {
-  struct record records[1 << EXP];
+  struct record records[1 << 14], *recordindex[1 << EXP];
   int nrecords;
-  char *start, *end;
+  char *start, *end, **nextchunk;
   pthread_t thread;
 } threaddata[NTHREAD];
 
@@ -62,21 +64,21 @@ uint64_t hashstr(char *s) {
 struct record *upsert(struct threaddata *t, const char *name, int size,
                       uint64_t hash) {
   int i = hash;
-  struct record *r;
+  struct record **rp;
 
   while (1) {
     i = ht_lookup(hash, EXP, i);
-    r = t->records + i;
-    if (!r->namesize) {
+    rp = t->recordindex + i;
+    if (!*rp) {
       assert(t->nrecords < nelem(t->records));
-      t->nrecords++;
-      assert(size + 1 <= nelem(r->name));
-      r->namesize = size;
-      memmove(r->name, name, size);
-      r->name[size] = 0;
-      return r;
-    } else if (size == namelen(r) && !memcmp(name, nameof(r), size)) {
-      return r;
+      *rp = t->records + t->nrecords++;
+      assert(size + 1 <= nelem((*rp)->name));
+      (*rp)->namesize = size;
+      memmove((*rp)->name, name, size);
+      (*rp)->name[size] = 0;
+      return *rp;
+    } else if (size == namelen(*rp) && !memcmp(name, nameof(*rp), size)) {
+      return *rp;
     }
   }
 }
@@ -84,8 +86,7 @@ struct record *upsert(struct threaddata *t, const char *name, int size,
 void printrecords(struct threaddata *t) {
   struct record *r;
   for (r = t->records; r < t->records + t->nrecords; r++)
-    if (r->namesize)
-      printf("%s\n", r->name);
+    printf("%s\n", r->name);
   putchar('\n');
 }
 
@@ -140,39 +141,17 @@ void updaterecord(struct record *r, int64_t total, int num, int64_t min,
   r->num += num;
 }
 
-int64_t parsenum(char **pp, char *end) {
-  int64_t val, sign, x, x10, x100;
-  int period;
+int64_t parsenum(char **pp) {
+  int64_t val, sign;
   char *p = *pp;
 
-  if (end - p < 8) {
-    sign = 1 - 2 * (*p == '-');
-    p += (*p == '-');
-    for (val = 0; *p && *p != '\n'; p++)
-      if (*p != '.')
-        val = 10 * val + digit(*p);
-    val *= sign;
-    *pp = p;
-    return val;
-  }
-
-  x = *(int64_t *)p;
-  /* Test if first character has bit 4 set to 0 */
-  sign = (x << 59) >> 63; /* 0 if negative, -1 if positive */
-  x &= ~0xff | sign;      /* mask minus if present */
-  period = __builtin_ctz(~x & 0x10101000);
-  /* mask period and all characters 1 or more positions before it */
-  x &= ~(0xffffffffffff00ffL << (period - 4));
-
-  x <<= (period == 12) * 8; /* add leading zero for case "1.2" */
-  x >>= (period == 28) * 8; /* remove leading zero left by minus for "-12.3" */
-  x &= 0x0f000f0f;          /* ascii to int */
-
-  x10 = 10 * (x << 16);
-  x100 = 100 * (x << 24);
-  val = ((x + x10 + x100) >> 24) & 0xff;
-  val *= -1 - 2 * sign;
-  *pp += (period + 12) / 8;
+  sign = 1 - 2 * (*p == '-');
+  p += (*p == '-');
+  for (val = 0; *p && *p != '\n'; p++)
+    if (*p != '.')
+      val = 10 * val + digit(*p);
+  val *= sign;
+  *pp = p;
   return val;
 }
 
@@ -192,15 +171,15 @@ void testparsenum(void) {
     char *in;
     int out, off;
   } * t, tests[] = {
-             {"12.3\n", 123, 4},         {"-12.3\n", -123, 5},
-             {"1.2\n", 12, 3},           {"-1.2\n", -12, 4},
-             {"12.3\naaaaaaaa", 123, 4}, {"-12.3\naaaaaaaa", -123, 5},
-             {"1.2\naaaaaaaa", 12, 3},   {"-1.2\naaaaaaaa", -12, 4},
+             {"12.3\n", 123, 4},
+             {"-12.3\n", -123, 5},
+             {"1.2\n", 12, 3},
+             {"-1.2\n", -12, 4},
          };
   for (t = tests; t < endof(tests); t++) {
     char *p = t->in;
     int f = 0;
-    int actual = parsenum(&p, p + strlen(p)), off = p - t->in;
+    int actual = parsenum(&p), off = p - t->in;
     warnx("t->in=%s", t->in);
     if (t->out != actual)
       failf(&f, "expected %d, got %d", t->out, actual);
@@ -218,31 +197,44 @@ void testparsenum(void) {
 
 void *processinput(void *data) {
   struct record *r;
-  char *line;
+  char *line, *chunk;
   struct threaddata *t = data;
 
-  for (line = t->start; line < t->end;) {
-    char *p = line;
-    int64_t val;
-    uint64_t hash = 0;
-    while (*p != ';')
-      hashupdate(&hash, *p++);
-    r = upsert(t, line, p - line, hash);
-    p++;
+  for (;;) {
+    chunk = __atomic_add_fetch(t->nextchunk, CHUNKSIZE, __ATOMIC_RELAXED) -
+            CHUNKSIZE;
+    if (chunk >= t->end)
+      break;
+    if (chunk > t->start) {
+      while (*chunk != '\n')
+        chunk++;
+      chunk++;
+    }
 
-    val = parsenum(&p, t->end);
-    updaterecord(r, val, 1, val, val);
-    if (*p != '\n')
-      errx(-1, "missing newline");
-    line = p + 1; /* consume newline */
+    for (line = chunk; line < chunk + CHUNKSIZE && line < t->end;) {
+      char *p = line;
+      int64_t val;
+      uint64_t hash = 0;
+      while (*p != ';')
+        hashupdate(&hash, *p++);
+      r = upsert(t, line, p - line, hash);
+      p++;
+
+      val = parsenum(&p);
+      updaterecord(r, val, 1, val, val);
+      if (*p != '\n')
+        errx(-1, "missing newline");
+      line = p + 1; /* consume newline */
+    }
   }
+
   return 0;
 }
 
 int main(int argc, char **argv) {
   struct record *r;
   struct stat st;
-  char *in;
+  char *in, *chunk;
   struct threaddata *t, *t0 = threaddata;
   int i;
 
@@ -251,7 +243,7 @@ int main(int argc, char **argv) {
     testupsert();
     return 0;
   } else if (argc != 1) {
-    errx(-1, "Usage: c8 [-test]");
+    errx(-1, "Usage: c11 [-test]");
   }
 
   if (fstat(0, &st))
@@ -259,16 +251,12 @@ int main(int argc, char **argv) {
   if (!(in = mmap(0, st.st_size, PROT_READ, MAP_PRIVATE, 0, 0)))
     err(-1, "mmap stdin");
 
+  chunk = in;
   for (i = 0; i < nelem(threaddata); i++) {
     t = threaddata + i;
-    t->start = i == 0 ? in : (t - 1)->end;
-    if (i == nelem(threaddata) - 1) {
-      t->end = in + st.st_size;
-    } else {
-      assert(t->end = memchr(in + (i + 1) * (st.st_size / nelem(threaddata)),
-                             '\n', 256));
-      t->end++;
-    }
+    t->start = in;
+    t->end = in + st.st_size;
+    t->nextchunk = &chunk;
     assert(!pthread_create(&t->thread, 0, processinput, t));
   }
 
@@ -276,9 +264,8 @@ int main(int argc, char **argv) {
     assert(!pthread_join(t->thread, 0));
     if (t > t0) {
       for (r = t->records; r < t->records + t->nrecords; r++)
-        if (r->namesize)
-          updaterecord(upsertsz(t0, nameof(r), namelen(r)), r->total, r->num,
-                       r->min, r->max);
+        updaterecord(upsertsz(t0, nameof(r), namelen(r)), r->total, r->num,
+                     r->min, r->max);
     }
   }
 
@@ -286,11 +273,10 @@ int main(int argc, char **argv) {
    * recordindex anymore. */
   qsort(t0->records, t0->nrecords, sizeof(*t0->records), recordnameasc);
 
-  for (r = t0->records, i = 0; r < t0->records + t0->nrecords; r++)
-    if (r->namesize)
-      printf("%s%s=%.1f/%.1f/%.1f", !i++ ? "{" : ", ", nameof(r),
-             (double)r->min / 10.0, (double)r->total / (10.0 * (double)r->num),
-             (double)r->max / 10.0);
+  for (r = t0->records; r < t0->records + t0->nrecords; r++)
+    printf("%s%s=%.1f/%.1f/%.1f", r == t0->records ? "{" : ", ", nameof(r),
+           (double)r->min / 10.0, (double)r->total / (10.0 * (double)r->num),
+           (double)r->max / 10.0);
   puts("}");
 
   return 0;
