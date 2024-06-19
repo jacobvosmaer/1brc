@@ -22,15 +22,19 @@
 #endif
 
 #define CHUNKSIZE (2 << 20)
+#define SHORTNAMESIZE 16
 
 struct record {
-  char name[128];
-  int namesize, num;
-  int64_t total, min, max;
+  char shortname[SHORTNAMESIZE];
+  const char *fullname;
+  int64_t total;
+  int32_t num;
+  int16_t min, max;
 };
 
-int namelen(const struct record *r) { return r->namesize; }
-const char *nameof(const struct record *r) { return r->name; }
+int namelen(const struct record *r) {
+  return strchr(r->fullname, ';') - r->fullname;
+}
 
 struct threaddata {
   struct record records[1 << 14], *recordindex[1 << EXP];
@@ -42,7 +46,7 @@ struct threaddata {
 int recordnameasc(const void *a_, const void *b_) {
   const struct record *a = a_, *b = b_;
   int alen = namelen(a), blen = namelen(b);
-  int cmp = memcmp(nameof(a), nameof(b), alen < blen ? alen : blen);
+  int cmp = memcmp(a->fullname, b->fullname, alen < blen ? alen : blen);
   return cmp + !cmp * (alen < blen ? -1 : 1);
 }
 
@@ -63,7 +67,7 @@ uint64_t hashstr(char *s) {
 
 struct record *upsert(struct threaddata *t, const char *name, int size,
                       uint64_t hash) {
-  int i = hash;
+  int i = hash, comparesize = size < SHORTNAMESIZE ? size + 1 : SHORTNAMESIZE;
   struct record **rp;
 
   while (1) {
@@ -72,21 +76,29 @@ struct record *upsert(struct threaddata *t, const char *name, int size,
     if (!*rp) {
       assert(t->nrecords < nelem(t->records));
       *rp = t->records + t->nrecords++;
-      assert(size + 1 <= nelem((*rp)->name));
-      (*rp)->namesize = size;
-      memmove((*rp)->name, name, size);
-      (*rp)->name[size] = 0;
+      (*rp)->fullname = name;
+      memmove((*rp)->shortname, name, comparesize);
       return *rp;
-    } else if (size == namelen(*rp) && !memcmp(name, nameof(*rp), size)) {
-      return *rp;
+    } else if (!memcmp(name, (*rp)->shortname, comparesize)) {
+      const char *p, *q;
+      if (p = (*rp)->shortname + SHORTNAMESIZE - 1, *p == 0 || *p == ';')
+        return *rp;
+      for (p = (*rp)->fullname + SHORTNAMESIZE, q = name + SHORTNAMESIZE;
+           p < t->end && q < name + size + 1 && *p != ';' && *q != ';';
+           p++, q++)
+        ;
+      if (p < t->end && q < t->end && *p == ';' && *q == ';')
+        return *rp;
     }
   }
 }
 
 void printrecords(struct threaddata *t) {
   struct record *r;
-  for (r = t->records; r < t->records + t->nrecords; r++)
-    printf("%s\n", r->name);
+  for (r = t->records; r < t->records + t->nrecords; r++) {
+    fwrite(r->fullname, 1, namelen(r), stdout);
+    putchar('\n');
+  }
   putchar('\n');
 }
 
@@ -99,27 +111,30 @@ struct record *upsertsz(struct threaddata *t, const char *s, int size) {
 }
 
 struct record *upsertstr(struct threaddata *t, char *s) {
-  return upsertsz(t, s, strlen(s));
+  return upsertsz(t, s, strchr(s, ';') - s);
 }
 
 void testupsert(void) {
   struct record *abc, *def;
   struct threaddata *t;
+  char *data = "abc;def;abc;def;012;";
   assert(t = calloc(sizeof(*t), 1));
+  t->start = data;
+  t->end = t->start + strlen(t->start);
 
-  abc = upsertstr(t, "abc");
+  abc = upsertstr(t, data);
   assert(t->nrecords == 1);
   printrecords(t);
-  def = upsertstr(t, "def");
+  def = upsertstr(t, data + 4);
   assert(t->nrecords == 2);
   printrecords(t);
-  assert(upsertstr(t, "abc") == abc);
+  assert(upsertstr(t, data + 8) == abc);
   assert(t->nrecords == 2);
   printrecords(t);
-  assert(upsertstr(t, "def") == def);
+  assert(upsertstr(t, data + 12) == def);
   assert(t->nrecords == 2);
   printrecords(t);
-  upsertstr(t, "012");
+  upsertstr(t, data + 16);
   assert(t->nrecords == 3);
   printrecords(t);
 
@@ -264,7 +279,7 @@ int main(int argc, char **argv) {
     assert(!pthread_join(t->thread, 0));
     if (t > t0) {
       for (r = t->records; r < t->records + t->nrecords; r++)
-        updaterecord(upsertsz(t0, nameof(r), namelen(r)), r->total, r->num,
+        updaterecord(upsertsz(t0, r->fullname, namelen(r)), r->total, r->num,
                      r->min, r->max);
     }
   }
@@ -273,10 +288,14 @@ int main(int argc, char **argv) {
    * recordindex anymore. */
   qsort(t0->records, t0->nrecords, sizeof(*t0->records), recordnameasc);
 
-  for (r = t0->records; r < t0->records + t0->nrecords; r++)
-    printf("%s%s=%.1f/%.1f/%.1f", r == t0->records ? "{" : ", ", nameof(r),
-           (double)r->min / 10.0, (double)r->total / (10.0 * (double)r->num),
-           (double)r->max / 10.0);
+  putchar('{');
+  for (r = t0->records; r < t0->records + t0->nrecords; r++) {
+    if (r > t0->records)
+      fputs(", ", stdout);
+    fwrite(r->fullname, 1, namelen(r), stdout);
+    printf("=%.1f/%.1f/%.1f", (double)r->min / 10.0,
+           (double)r->total / (10.0 * (double)r->num), (double)r->max / 10.0);
+  }
   puts("}");
 
   return 0;
