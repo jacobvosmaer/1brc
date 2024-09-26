@@ -171,7 +171,7 @@ int main(int argc, char **argv) {
   struct record *r;
   struct stat st;
   char *in;
-  struct threaddata *t, *t0 = threaddata;
+  struct threaddata *t;
   int i;
 
   if (argc == 2 && !strcmp("-test", argv[1])) {
@@ -200,20 +200,22 @@ int main(int argc, char **argv) {
 
   for (t = threaddata; t < threaddata + nelem(threaddata); t++) {
     assert(!pthread_join(t->thread, 0));
-    if (t > t0) {
+    if (t > threaddata)
       for (r = t->records; r < t->records + t->nrecords; r++)
-        updaterecord(upsertstr(t0, r->name), r->total, r->num, r->min, r->max);
-    }
+        updaterecord(upsertstr(threaddata, r->name), r->total, r->num, r->min,
+                     r->max);
   }
 
   /* This qsort will invalidate recordindex but that is OK because we don't need
    * recordindex anymore. */
-  qsort(t0->records, t0->nrecords, sizeof(*t0->records), recordnameasc);
+  qsort(threaddata->records, threaddata->nrecords, sizeof(*threaddata->records),
+        recordnameasc);
 
-  for (r = t0->records; r < t0->records + t0->nrecords; r++)
-    printf("%s%s=%.1f/%.1f/%.1f", r == t0->records ? "{" : ", ", r->name,
-           (double)r->min / 10.0, (double)r->total / (10.0 * (double)r->num),
-           (double)r->max / 10.0);
+  for (r = threaddata->records; r < threaddata->records + threaddata->nrecords;
+       r++)
+    printf("%s%s=%.1f/%.1f/%.1f", r == threaddata->records ? "{" : ", ",
+           r->name, (double)r->min / 10.0,
+           (double)r->total / (10.0 * (double)r->num), (double)r->max / 10.0);
   puts("}");
 
   return 0;
