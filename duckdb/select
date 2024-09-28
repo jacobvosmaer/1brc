@@ -1,0 +1,11 @@
+#!/bin/sh
+duckdb <<'EOF'
+select name, min(value), avg(value), max(value)
+  from read_csv(
+    'data/measurements.txt',
+    delim = ';',
+    header=false,
+    columns={'name':'varchar', 'value':'decimal(3,1)'}
+  )
+  group by name order by name;
+EOF
