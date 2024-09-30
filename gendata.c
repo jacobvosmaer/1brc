@@ -51,7 +51,7 @@ double randomgaussian(struct marsagliapolar *mp) {
 
 int main(int argc, char **argv) {
   struct city *cities = 0;
-  int ncities = 0, maxcities = 0, nrows, i;
+  int ncities = 0, nrows, i;
   struct marsagliapolar mp = {0};
 
   if (argc != 2)
@@ -66,16 +66,12 @@ int main(int argc, char **argv) {
     struct city *c;
     if (*buf == '#')
       continue;
-    if (ncities == maxcities) {
-      maxcities = maxcities ? 2 * maxcities : 1;
-      assert(cities = realloc(cities, maxcities * sizeof(*cities)));
-    }
-    c = cities + ncities;
     assert(p = strchr(buf, ';'));
     *p = 0;
+    assert(cities = realloc(cities, ++ncities * sizeof(*cities)));
+    c = cities + ncities - 1;
     assert(c->name = strdup(buf));
     assert(sscanf(p + 1, "%lf", &c->mean) == 1);
-    ncities++;
   }
 
   assert(ncities >= nelem(selectcities));
