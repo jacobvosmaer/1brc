@@ -96,7 +96,7 @@ struct record *upsert(struct threaddata *t, char *name, int size,
   int i = ht_lookup(hash, EXP, hash);
   struct record *rp;
 
-  while (1) {
+  for (i = ht_lookup(hash, EXP, hash);; i = (i + 1) % nelem(t->records)) {
     rp = t->records + i;
     if (!rp->name) {
       t->nrecords++;
@@ -106,8 +106,6 @@ struct record *upsert(struct threaddata *t, char *name, int size,
       return rp;
     } else if (equalmemstr(name, size, rp->name)) {
       return rp;
-    } else {
-      i = (i + 1) & (((uint32_t)1 << EXP) - 1);
     }
   }
 }
