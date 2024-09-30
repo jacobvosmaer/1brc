@@ -1,0 +1,2 @@
+#!/bin/sh
+hyperfine -N --warmup 0 --input data/measurements.txt "$@"
