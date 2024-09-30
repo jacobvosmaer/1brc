@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
     int x, n;
     char buf[6];
     do
-      x = 10.0 * c->mean + randomgaussian(&mp) * 100.0;
+      x = 10.0 * (c->mean + 10.0 * randomgaussian(&mp));
     while (x < -999 || x > 999);
     n = 0;
     if (x < 0) {
