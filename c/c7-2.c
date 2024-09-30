@@ -15,7 +15,7 @@
 #define endof(x) ((x) + nelem(x))
 
 #ifndef EXP
-#define EXP 16
+#define EXP 14
 #endif
 #ifndef NTHREAD
 #define NTHREAD 16
