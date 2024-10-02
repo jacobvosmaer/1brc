@@ -65,7 +65,7 @@ struct Record {
 };
 
 struct threaddata {
-  struct record records[1 << EXP];
+  struct Record records[1 << EXP];
   int nrecords;
   struct names {
     char data[1 << 18], *end;
@@ -75,9 +75,9 @@ struct threaddata {
   atomic_ptrdiff_t *offset;
 } threaddata[NTHREAD];
 
-int Recordnamepresent(struct Record *r) { return r->name & 1; }
-char *Recordname(struct threaddata *t, struct Record *r) {
-  return t->names.data + ((r->name & 0xfffffe) >> 1);
+int Recordnamepresent(struct Record *r) { return r->name & 0x800000; }
+char *Recordname(struct threaddata *t, const struct Record *r) {
+  return t->names.data + (r->name & 0x7fffff);
 }
 int Recordnamesize(struct Record *r) { return r->name >> 24; }
 
@@ -155,15 +155,16 @@ char *namealloc(struct threaddata *t, int size) {
 }
 
 int recordnameasc(const void *a_, const void *b_) {
-  const struct record *a = a_, *b = b_;
-  if (!a->name && !b->name)
+  const struct Record *a = a_, *b = b_;
+  char *aname = Recordname(threaddata, a), *bname = Recordname(threaddata, b);
+  if (!aname && !bname)
     return 0;
-  else if (!a->name)
+  else if (!aname)
     return 1;
-  else if (!b->name)
+  else if (!bname)
     return -1;
   else
-    return strcmp(a->name, b->name);
+    return strcmp(aname, bname);
 }
 
 /* From https://nullprogram.com/blog/2022/08/08/ */
@@ -192,39 +193,41 @@ int equalmemstr(char *mem, int size, char *str) {
   return !size && !*str;
 }
 
-struct record *upsert(struct threaddata *t, char *name, int size,
+struct Record *upsert(struct threaddata *t, char *name, int size,
                       uint64_t hash) {
   int i = ht_lookup(hash, EXP, hash);
-  struct record *rp;
+  struct Record *rp;
 
   for (i = ht_lookup(hash, EXP, hash);; i = (i + 1) % nelem(t->records)) {
     rp = t->records + i;
-    if (!rp->name) {
+    if (!Recordnamepresent(rp)) {
+      char *namep = namealloc(t, size + 1);
       t->nrecords++;
-      rp->name = namealloc(t, size + 1);
-      memmove(rp->name, name, size);
-      rp->name[size] = 0;
+      rp->name = 0x800000 | (namep - t->names.data) | ((unsigned)size << 24);
+      memmove(namep, name, size);
+      namep[size] = 0;
       return rp;
-    } else if (equalmemstr(name, size, rp->name)) {
+    } else if (Recordnamesize(rp) == size &&
+               equalmemstr(name, size, Recordname(t, rp))) {
       return rp;
     }
   }
 }
 
 void printrecords(struct threaddata *t) {
-  struct record *r;
+  struct Record *r;
   for (r = t->records; r < endof(t->records); r++)
-    if (r->name)
-      printf("%s\n", r->name);
+    if (Recordnamepresent(r))
+      printf("%s\n", Recordname(t, r));
   putchar('\n');
 }
 
-struct record *upsertstr(struct threaddata *t, char *s) {
+struct Record *upsertstr(struct threaddata *t, char *s) {
   return upsert(t, s, strlen(s), hashstr(s));
 }
 
 void testupsert(void) {
-  struct record *abc, *def;
+  struct Record *abc, *def;
   struct threaddata *t = threaddata;
 
   abc = upsertstr(t, "abc");
@@ -249,20 +252,20 @@ int digit(char c) {
   return c - '0';
 }
 
-void updaterecord(struct record *r, int64_t total, int num, int64_t min,
+void updaterecord(struct Record *r, int64_t total, int num, int64_t min,
                   int64_t max) {
-  if (!r->num || min < r->min)
-    r->min = min;
-  if (!r->num || max > r->max)
-    r->max = max;
-  r->total += total;
+  if (!r->num || min < Recordmin(r))
+    Recordsetmin(r, min);
+  if (!r->num || max > Recordmax(r))
+    Recordsetmax(r, max);
+  Recordsettotal(r, Recordtotal(r) + total);
   r->num += num;
 }
 
 #define CHUNKSIZE (1 << 20)
 
 void *processinput(void *data) {
-  struct record *r;
+  struct Record *r;
   char *line, *chunk, *chunkend;
   struct threaddata *t = data;
   while (chunk = t->start + atomic_fetch_add(t->offset, CHUNKSIZE),
@@ -301,7 +304,7 @@ void *processinput(void *data) {
 }
 
 int main(int argc, char **argv) {
-  struct record *r;
+  struct Record *r;
   struct stat st;
   char *in;
   struct threaddata *t;
@@ -309,7 +312,7 @@ int main(int argc, char **argv) {
   atomic_ptrdiff_t inputoffset = 0;
 
   if (argc == 2 && !strcmp("-test", argv[1])) {
-    printf("sizeof(struct record)=%ld\n", sizeof(struct record));
+    printf("sizeof(struct Record)=%ld\n", sizeof(struct Record));
     testupsert();
     testpacksigned();
     testRecord();
@@ -338,9 +341,9 @@ int main(int argc, char **argv) {
       assert(!pthread_join(t->thread, 0));
       if (t > threaddata)
         for (r = t->records; r < endof(t->records); r++)
-          if (r->name)
-            updaterecord(upsertstr(threaddata, r->name), r->total, r->num,
-                         r->min, r->max);
+          if (Recordnamepresent(r))
+            updaterecord(upsertstr(threaddata, Recordname(t, r)),
+                         Recordtotal(r), r->num, Recordmin(r), Recordmax(r));
     }
   }
 
@@ -349,10 +352,13 @@ int main(int argc, char **argv) {
   qsort(threaddata->records, nelem(threaddata->records),
         sizeof(*threaddata->records), recordnameasc);
 
-  for (r = threaddata->records; r < endof(threaddata->records) && r->name; r++)
+  for (r = threaddata->records;
+       r < endof(threaddata->records); r++)
+if(Recordnamepresent(r))
     printf("%s%s=%.1f/%.1f/%.1f", r == threaddata->records ? "{" : ", ",
-           r->name, (double)r->min / 10.0,
-           (double)r->total / (10.0 * (double)r->num), (double)r->max / 10.0);
+           Recordname(threaddata, r), (double)Recordmin(r) / 10.0,
+           (double)Recordtotal(r) / (10.0 * (double)r->num),
+           (double)Recordmax(r) / 10.0);
   puts("}");
 
   return 0;
