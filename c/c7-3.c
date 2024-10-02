@@ -28,29 +28,31 @@ struct record {
   int32_t num;
 };
 
-uint64_t packsigned(int64_t x, int bits) {
-  return x < 0 ? x + (1LL << bits) : x;
+uint64_t packsigned(int64_t x, int bits, int shift) {
+  uint64_t out = x < 0 ? x + (1LL << bits) : x;
+  return out << shift;
 }
 
-int64_t unpacksigned(uint64_t packed, int bits) {
-  int64_t out = packed & ((1ULL << bits) - 1);
+int64_t unpacksigned(uint64_t packed, int bits, int shift) {
+  int64_t out = ((packed >> shift) & ((1ULL << bits) - 1));
   if (out >= (1LL << (bits - 1)))
     out -= (1LL << bits);
   return out;
 }
 
 void testpacksigned(void) {
-  int bits = 8, fail = 0, i;
+  int bits = 8, fail = 0, i, shift;
 
-  for (i = -128; i < 128; i++) {
-    uint64_t packed = packsigned(i, bits);
-    int64_t unpacked = unpacksigned(packed, bits);
-    int ok = (i == unpacked) && !(packed & ~((1 << bits) - 1));
-    if (0)
-      printf("test1: i=%d packed=%#llx unpacked=%lld ok=%d\n", i, packed,
-             unpacked, ok);
-    fail += !ok;
-  }
+  for (shift = 0; shift < 2; shift++)
+    for (i = -128; i < 128; i++) {
+      uint64_t packed = packsigned(i, bits, shift);
+      int64_t unpacked = unpacksigned(packed, bits, shift);
+      int ok = (i == unpacked) && !((packed >> shift) & ~((1 << bits) - 1));
+      if (0)
+        printf("test1: i=%d shift=%d packed=%#llx unpacked=%lld ok=%d\n", i,
+               shift, packed, unpacked, ok);
+      fail += !ok;
+    }
 
   if (fail)
     errx(-1, "testpacksigned failed");
@@ -81,33 +83,31 @@ int Recordnamesize(struct Record *r) { return r->name >> 24; }
 
 #define TOTALBITS 41
 int64_t Recordtotal(struct Record *r) {
-  return unpacksigned(r->packed, TOTALBITS);
+  return unpacksigned(r->packed, TOTALBITS, 0);
 }
 void Recordsettotal(struct Record *r, int64_t total) {
   uint64_t mask = (1ULL << (1 + TOTALBITS)) - 1;
-  r->packed = (r->packed & ~mask) | (packsigned(total, TOTALBITS) & mask);
+  r->packed = (r->packed & ~mask) | (packsigned(total, TOTALBITS, 0) & mask);
 }
 
 #define MINBITS 11
 int16_t Recordmin(struct Record *r) {
-  return unpacksigned(r->packed >> TOTALBITS, MINBITS);
+  return unpacksigned(r->packed, MINBITS, TOTALBITS);
 }
 void Recordsetmin(struct Record *r, int16_t min) {
   int shift = TOTALBITS;
   uint64_t mask = ((1ULL << (1 + MINBITS)) - 1) << shift;
-  r->packed =
-      (r->packed & ~mask) | ((packsigned(min, MINBITS) << shift) & mask);
+  r->packed = (r->packed & ~mask) | ((packsigned(min, MINBITS, shift)) & mask);
 }
 
 #define MAXBITS 11
 int16_t Recordmax(struct Record *r) {
-  return unpacksigned(r->packed >> 52, 11);
+  return unpacksigned(r->packed, MAXBITS, TOTALBITS + MINBITS);
 }
 void Recordsetmax(struct Record *r, int16_t max) {
   int shift = TOTALBITS + MINBITS;
   uint64_t mask = ((1ULL << (1 + MAXBITS)) - 1) << shift;
-  r->packed =
-      (r->packed & ~mask) | ((packsigned(max, MAXBITS) << shift) & mask);
+  r->packed = (r->packed & ~mask) | ((packsigned(max, MAXBITS, shift)) & mask);
 }
 
 void testRecord(void) {
